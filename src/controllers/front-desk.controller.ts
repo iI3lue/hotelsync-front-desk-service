@@ -23,6 +23,17 @@ export class FrontDeskController {
     }
   }
 
+  async getAssignment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const assignment = await frontDeskService.getAssignment(
+        req.params.bookingId as string
+      );
+      res.json(assignment);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async checkOut(req: Request, res: Response, next: NextFunction) {
     try {
       const assignment = await frontDeskService.checkOut(req.body);

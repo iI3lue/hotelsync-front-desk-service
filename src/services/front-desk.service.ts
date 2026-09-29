@@ -30,6 +30,23 @@ export class FrontDeskService {
     });
   }
 
+  /** Asignación de habitación de una reserva (404 si no tiene check-in). */
+  async getAssignment(bookingId: string) {
+    const assignment = await prisma.roomAssignment.findUnique({
+      where: { booking_id: bookingId },
+    });
+
+    if (!assignment) {
+      throw new AppError(
+        404,
+        `No check-in found for booking ${bookingId}`,
+        "Not Found"
+      );
+    }
+
+    return assignment;
+  }
+
   async checkIn(data: CheckInInput) {
     const booking = await fetchBooking(data.booking_id);
 

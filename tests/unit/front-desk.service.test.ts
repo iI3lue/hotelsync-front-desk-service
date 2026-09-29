@@ -95,6 +95,30 @@ describe("FrontDeskService", () => {
     });
   });
 
+  describe("getAssignment", () => {
+    it("should return the room assignment for a booking", async () => {
+      mockPrisma.roomAssignment.findUnique.mockResolvedValue({
+        booking_id: BOOKING_ID,
+        physical_room_number: "101",
+      });
+
+      const result = await frontDeskService.getAssignment(BOOKING_ID);
+
+      expect(mockPrisma.roomAssignment.findUnique).toHaveBeenCalledWith({
+        where: { booking_id: BOOKING_ID },
+      });
+      expect(result.physical_room_number).toBe("101");
+    });
+
+    it("should throw 404 when there is no assignment", async () => {
+      mockPrisma.roomAssignment.findUnique.mockResolvedValue(null);
+
+      await expect(frontDeskService.getAssignment(BOOKING_ID)).rejects.toThrow(
+        AppError
+      );
+    });
+  });
+
   describe("checkIn", () => {
     it("should create a room assignment for a confirmed booking", async () => {
       mockFetchBooking.mockResolvedValue(confirmedBooking);

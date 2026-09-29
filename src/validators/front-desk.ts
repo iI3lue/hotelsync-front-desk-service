@@ -18,6 +18,10 @@ export const checkOutSchema = z.object({
   booking_id: z.string().uuid(),
 });
 
+export const assignmentBookingParamSchema = z.object({
+  bookingId: z.string().uuid(),
+});
+
 export const createIncidentSchema = z.object({
   booking_id: z.string().uuid(),
   description: z.string().min(1),
