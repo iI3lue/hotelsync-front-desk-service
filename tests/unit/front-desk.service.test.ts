@@ -173,6 +173,10 @@ describe("FrontDeskService", () => {
         where: { booking_id: BOOKING_ID },
         data: { checked_out_at: expect.any(Date) },
       });
+      expect(mockPrisma.arrival.updateMany).toHaveBeenCalledWith({
+        where: { booking_id: BOOKING_ID },
+        data: { status: "checked_out" },
+      });
       expect(result.checked_out_at).toBeTruthy();
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(mockPrisma.eventOutbox.create).toHaveBeenCalledTimes(2);

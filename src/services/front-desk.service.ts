@@ -94,10 +94,16 @@ export class FrontDeskService {
     // El dispatcher publica `checkout.completed` (Housekeeping, Billing) y
     // `booking.completed` (Loyalty a futuro) a RabbitMQ con confirm
     // (documento de arquitectura §4.5, tabla de eventos §5.11).
+    // La llegada sale de la lista en el mismo acto: ya no es `confirmed`.
     const closed = await prisma.$transaction(async (tx) => {
       const updated = await tx.roomAssignment.update({
         where: { booking_id: data.booking_id },
         data: { checked_out_at: new Date() },
+      });
+
+      await tx.arrival.updateMany({
+        where: { booking_id: data.booking_id },
+        data: { status: "checked_out" },
       });
 
       await enqueueOutboxEvent(tx, "checkout.completed", {
