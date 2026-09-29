@@ -15,7 +15,7 @@ function mockDb() {
 }
 
 describe("handleBookingEvent", () => {
-  it("should upsert the arrival as confirmed on booking.created", async () => {
+  it("should upsert the arrival as pending on booking.created", async () => {
     const db = mockDb();
 
     await handleBookingEvent(db, "booking.created", {
@@ -38,7 +38,7 @@ describe("handleBookingEvent", () => {
         check_in: new Date("2026-10-01"),
         check_out: new Date("2026-10-05"),
         channel: "direct",
-        status: "confirmed",
+        status: "pending",
       },
       update: {
         guest_id: GUEST_ID,
@@ -47,8 +47,29 @@ describe("handleBookingEvent", () => {
         check_in: new Date("2026-10-01"),
         check_out: new Date("2026-10-05"),
         channel: "direct",
-        status: "confirmed",
+        status: "pending",
       },
+    });
+    expect(db.arrival.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("should upsert the arrival as confirmed on booking.confirmed", async () => {
+    const db = mockDb();
+
+    await handleBookingEvent(db, "booking.confirmed", {
+      booking_id: BOOKING_ID,
+      guest_id: GUEST_ID,
+      hotel_id: HOTEL_ID,
+      room_type_id: ROOM_TYPE_ID,
+      check_in: "2026-10-01",
+      check_out: "2026-10-05",
+      channel: "direct",
+    } as any);
+
+    expect(db.arrival.upsert).toHaveBeenCalledWith({
+      where: { booking_id: BOOKING_ID },
+      create: expect.objectContaining({ status: "confirmed" }),
+      update: expect.objectContaining({ status: "confirmed" }),
     });
     expect(db.arrival.updateMany).not.toHaveBeenCalled();
   });
