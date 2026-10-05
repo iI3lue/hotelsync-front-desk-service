@@ -2,6 +2,7 @@ import { AppError } from "../middleware/error-handler.js";
 
 const BOOKING_API =
   process.env.BOOKING_SERVICE_URL || "http://localhost:3004/v1";
+const BOOKING_SERVICE_KEY = process.env.BOOKING_SERVICE_KEY || "";
 
 export interface BookingRef {
   booking_id: string;
@@ -22,7 +23,11 @@ export interface BookingRef {
 async function bookingFetch<T>(path: string): Promise<T | null> {
   let res: Response;
   try {
-    res = await fetch(`${BOOKING_API}${path}`);
+    res = await fetch(`${BOOKING_API}${path}`, {
+      headers: BOOKING_SERVICE_KEY
+        ? { "x-front-desk-key": BOOKING_SERVICE_KEY }
+        : {},
+    });
   } catch {
     throw new AppError(
       502,

@@ -15,12 +15,13 @@ function mockDb() {
 }
 
 describe("handleBookingEvent", () => {
-  it("should upsert the arrival as pending on booking.created", async () => {
+  it("should upsert the arrival as confirmed on booking.created", async () => {
     const db = mockDb();
 
     await handleBookingEvent(db, "booking.created", {
       booking_id: BOOKING_ID,
       guest_id: GUEST_ID,
+      guest_name: "Ana",
       hotel_id: HOTEL_ID,
       room_type_id: ROOM_TYPE_ID,
       check_in: "2026-10-01",
@@ -33,45 +34,46 @@ describe("handleBookingEvent", () => {
       create: {
         booking_id: BOOKING_ID,
         guest_id: GUEST_ID,
+        guest_name: "Ana",
         hotel_id: HOTEL_ID,
         room_type_id: ROOM_TYPE_ID,
         check_in: new Date("2026-10-01"),
         check_out: new Date("2026-10-05"),
         channel: "direct",
-        status: "pending",
+        status: "confirmed",
       },
       update: {
         guest_id: GUEST_ID,
+        guest_name: "Ana",
         hotel_id: HOTEL_ID,
         room_type_id: ROOM_TYPE_ID,
         check_in: new Date("2026-10-01"),
         check_out: new Date("2026-10-05"),
         channel: "direct",
-        status: "pending",
+        status: "confirmed",
       },
     });
     expect(db.arrival.updateMany).not.toHaveBeenCalled();
   });
 
-  it("should upsert the arrival as confirmed on booking.confirmed", async () => {
+  it("should default a missing guest name to null", async () => {
     const db = mockDb();
 
-    await handleBookingEvent(db, "booking.confirmed", {
+    await handleBookingEvent(db, "booking.created", {
       booking_id: BOOKING_ID,
       guest_id: GUEST_ID,
       hotel_id: HOTEL_ID,
       room_type_id: ROOM_TYPE_ID,
       check_in: "2026-10-01",
       check_out: "2026-10-05",
-      channel: "direct",
     } as any);
 
-    expect(db.arrival.upsert).toHaveBeenCalledWith({
-      where: { booking_id: BOOKING_ID },
-      create: expect.objectContaining({ status: "confirmed" }),
-      update: expect.objectContaining({ status: "confirmed" }),
-    });
-    expect(db.arrival.updateMany).not.toHaveBeenCalled();
+    expect(db.arrival.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ guest_name: null }),
+        update: expect.objectContaining({ guest_name: null }),
+      })
+    );
   });
 
   it("should mark the arrival as cancelled on booking.cancelled (idempotent, no junk rows)", async () => {

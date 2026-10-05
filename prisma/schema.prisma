@@ -4,14 +4,14 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model RoomAssignment {
   assignment_id        String    @id @default(uuid()) @db.Uuid
   booking_id           String    @unique @db.Uuid
+  physical_room_id     String?   @db.Uuid
   physical_room_number String    @db.VarChar(20)
   checked_in_at        DateTime  @default(now()) @db.Timestamptz(6)
   checked_out_at       DateTime? @db.Timestamptz(6)
@@ -30,6 +30,7 @@ model Arrival {
   hotel_id     String   @db.Uuid
   room_type_id String   @db.Uuid
   guest_id     String   @db.Uuid
+  guest_name   String?  @db.VarChar(255)
   check_in     DateTime @db.Date
   check_out    DateTime @db.Date
   channel      String   @default("direct") @db.VarChar(20)
@@ -58,10 +59,14 @@ model EventOutbox {
 model GuestIncident {
   incident_id String   @id @default(uuid()) @db.Uuid
   booking_id  String   @db.Uuid
+  // UUID externo copiado desde Booking para poder aplicar alcance por hotel
+  // sin una FK entre las bases de datos de ambos servicios.
+  hotel_id    String?  @db.Uuid
   description String   @db.Text
   status      String   @default("open") @db.VarChar(20)
   created_at  DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([booking_id])
+  @@index([hotel_id, created_at])
   @@map("guest_incidents")
 }

@@ -66,6 +66,19 @@ const confirmedBooking = {
   status: "confirmed",
 };
 
+const STAFF = {
+  sub: "11111111-2222-4333-8444-555555555555",
+  email: "recep@example.com",
+  email_verified: true,
+  role: "RECEPTIONIST",
+  hotel_id: HOTEL_ID,
+  scope: "hotel" as const,
+  iss: "hotelsync",
+  aud: "hotelsync-api",
+  iat: 0,
+  exp: 9999999999,
+};
+
 describe("FrontDeskService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -76,10 +89,13 @@ describe("FrontDeskService", () => {
       const arrivals = [{ booking_id: BOOKING_ID, hotel_id: HOTEL_ID }];
       mockPrisma.arrival.findMany.mockResolvedValue(arrivals);
 
-      const result = await frontDeskService.getArrivals({
-        hotel_id: HOTEL_ID,
-        date: "2026-10-02",
-      });
+      const result = await frontDeskService.getArrivals(
+        {
+          hotel_id: HOTEL_ID,
+          date: "2026-10-02",
+        },
+        STAFF
+      );
 
       expect(result).toEqual(arrivals);
       expect(mockPrisma.arrival.findMany).toHaveBeenCalledWith({
@@ -93,16 +109,30 @@ describe("FrontDeskService", () => {
       });
       expect(mockFetchConfirmed).not.toHaveBeenCalled();
     });
+
+    it("should reject a receptionist querying another hotel's arrivals", async () => {
+      await expect(
+        frontDeskService.getArrivals(
+          {
+            hotel_id: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+            date: "2026-10-02",
+          },
+          STAFF
+        )
+      ).rejects.toThrow(AppError);
+      expect(mockPrisma.arrival.findMany).not.toHaveBeenCalled();
+    });
   });
 
   describe("getAssignment", () => {
-    it("should return the room assignment for a booking", async () => {
+    it("should return the room assignment for a booking of the actor hotel", async () => {
+      mockFetchBooking.mockResolvedValue(confirmedBooking);
       mockPrisma.roomAssignment.findUnique.mockResolvedValue({
         booking_id: BOOKING_ID,
         physical_room_number: "101",
       });
 
-      const result = await frontDeskService.getAssignment(BOOKING_ID);
+      const result = await frontDeskService.getAssignment(BOOKING_ID, STAFF);
 
       expect(mockPrisma.roomAssignment.findUnique).toHaveBeenCalledWith({
         where: { booking_id: BOOKING_ID },
@@ -111,11 +141,24 @@ describe("FrontDeskService", () => {
     });
 
     it("should throw 404 when there is no assignment", async () => {
+      mockFetchBooking.mockResolvedValue(confirmedBooking);
       mockPrisma.roomAssignment.findUnique.mockResolvedValue(null);
 
-      await expect(frontDeskService.getAssignment(BOOKING_ID)).rejects.toThrow(
-        AppError
-      );
+      await expect(
+        frontDeskService.getAssignment(BOOKING_ID, STAFF)
+      ).rejects.toThrow(AppError);
+    });
+
+    it("should reject a receptionist reading another hotel's booking", async () => {
+      mockFetchBooking.mockResolvedValue({
+        ...confirmedBooking,
+        hotel_id: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+      });
+
+      await expect(
+        frontDeskService.getAssignment(BOOKING_ID, STAFF)
+      ).rejects.toThrow(AppError);
+      expect(mockPrisma.roomAssignment.findUnique).not.toHaveBeenCalled();
     });
   });
 
@@ -128,25 +171,77 @@ describe("FrontDeskService", () => {
         physical_room_number: "101",
       });
 
-      const result = await frontDeskService.checkIn({
+      const result = await frontDeskService.checkIn(
+        {
+          booking_id: BOOKING_ID,
+          physical_room_number: "101",
+        },
+        STAFF
+      );
+
+      expect(mockPrisma.roomAssignment.create).toHaveBeenCalledWith({
+        data: {
+          booking_id: BOOKING_ID,
+          physical_room_id: null,
+          physical_room_number: "101",
+        },
+      });
+      expect(result.physical_room_number).toBe("101");
+    });
+
+    it("should throw 403 when staff belongs to another hotel", async () => {
+      mockFetchBooking.mockResolvedValue(confirmedBooking);
+      mockPrisma.roomAssignment.findUnique.mockResolvedValue(null);
+
+      await expect(
+        frontDeskService.checkIn(
+          { booking_id: BOOKING_ID, physical_room_number: "101" },
+          { ...STAFF, hotel_id: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff" }
+        )
+      ).rejects.toThrow(AppError);
+      expect(mockPrisma.roomAssignment.create).not.toHaveBeenCalled();
+    });
+
+    it("should store the physical room uuid when provided", async () => {
+      const physicalRoomId = "e1b2c3d4-e5f6-4890-abcd-ef1234567890";
+      mockFetchBooking.mockResolvedValue(confirmedBooking);
+      mockPrisma.roomAssignment.findUnique.mockResolvedValue(null);
+      mockPrisma.roomAssignment.create.mockResolvedValue({
         booking_id: BOOKING_ID,
+        physical_room_id: physicalRoomId,
         physical_room_number: "101",
       });
 
+      const result = await frontDeskService.checkIn(
+        {
+          booking_id: BOOKING_ID,
+          physical_room_number: "101",
+          physical_room_id: physicalRoomId,
+        },
+        STAFF
+      );
+
       expect(mockPrisma.roomAssignment.create).toHaveBeenCalledWith({
-        data: { booking_id: BOOKING_ID, physical_room_number: "101" },
+        data: {
+          booking_id: BOOKING_ID,
+          physical_room_id: physicalRoomId,
+          physical_room_number: "101",
+        },
       });
-      expect(result.physical_room_number).toBe("101");
+      expect(result.physical_room_id).toBe(physicalRoomId);
     });
 
     it("should throw 404 when booking does not exist", async () => {
       mockFetchBooking.mockResolvedValue(null);
 
       await expect(
-        frontDeskService.checkIn({
-          booking_id: BOOKING_ID,
-          physical_room_number: "101",
-        })
+        frontDeskService.checkIn(
+          {
+            booking_id: BOOKING_ID,
+            physical_room_number: "101",
+          },
+          STAFF
+        )
       ).rejects.toThrow(AppError);
       expect(mockPrisma.roomAssignment.create).not.toHaveBeenCalled();
     });
@@ -155,10 +250,13 @@ describe("FrontDeskService", () => {
       mockFetchBooking.mockResolvedValue({ ...confirmedBooking, status: "pending" });
 
       await expect(
-        frontDeskService.checkIn({
-          booking_id: BOOKING_ID,
-          physical_room_number: "101",
-        })
+        frontDeskService.checkIn(
+          {
+            booking_id: BOOKING_ID,
+            physical_room_number: "101",
+          },
+          STAFF
+        )
       ).rejects.toThrow(AppError);
     });
 
@@ -170,16 +268,20 @@ describe("FrontDeskService", () => {
       });
 
       await expect(
-        frontDeskService.checkIn({
-          booking_id: BOOKING_ID,
-          physical_room_number: "102",
-        })
+        frontDeskService.checkIn(
+          {
+            booking_id: BOOKING_ID,
+            physical_room_number: "102",
+          },
+          STAFF
+        )
       ).rejects.toThrow(AppError);
     });
   });
 
   describe("checkOut", () => {
     it("should close an active check-in and emit checkout.completed + booking.completed", async () => {
+      mockFetchBooking.mockResolvedValue(confirmedBooking);
       mockPrisma.roomAssignment.findUnique.mockResolvedValue({
         booking_id: BOOKING_ID,
         physical_room_number: "101",
@@ -191,15 +293,14 @@ describe("FrontDeskService", () => {
         checked_out_at: new Date(),
       });
 
-      const result = await frontDeskService.checkOut({ booking_id: BOOKING_ID });
+      const result = await frontDeskService.checkOut(
+        { booking_id: BOOKING_ID },
+        STAFF
+      );
 
       expect(mockPrisma.roomAssignment.update).toHaveBeenCalledWith({
         where: { booking_id: BOOKING_ID },
         data: { checked_out_at: expect.any(Date) },
-      });
-      expect(mockPrisma.arrival.updateMany).toHaveBeenCalledWith({
-        where: { booking_id: BOOKING_ID },
-        data: { status: "checked_out" },
       });
       expect(result.checked_out_at).toBeTruthy();
       expect(mockPrisma.$transaction).toHaveBeenCalled();
@@ -210,6 +311,7 @@ describe("FrontDeskService", () => {
           payload: {
             booking_id: BOOKING_ID,
             physical_room_number: "101",
+            physical_room_id: null,
           },
         },
       });
@@ -225,22 +327,41 @@ describe("FrontDeskService", () => {
     });
 
     it("should throw 404 when there is no active check-in", async () => {
+      mockFetchBooking.mockResolvedValue(confirmedBooking);
       mockPrisma.roomAssignment.findUnique.mockResolvedValue(null);
 
       await expect(
-        frontDeskService.checkOut({ booking_id: BOOKING_ID })
+        frontDeskService.checkOut({ booking_id: BOOKING_ID }, STAFF)
       ).rejects.toThrow(AppError);
     });
 
     it("should throw 409 when already checked out", async () => {
+      mockFetchBooking.mockResolvedValue(confirmedBooking);
       mockPrisma.roomAssignment.findUnique.mockResolvedValue({
         booking_id: BOOKING_ID,
         checked_out_at: new Date(),
       });
 
       await expect(
-        frontDeskService.checkOut({ booking_id: BOOKING_ID })
+        frontDeskService.checkOut({ booking_id: BOOKING_ID }, STAFF)
       ).rejects.toThrow(AppError);
+    });
+
+    it("should throw 403 when staff belongs to another hotel", async () => {
+      mockFetchBooking.mockResolvedValue(confirmedBooking);
+      mockPrisma.roomAssignment.findUnique.mockResolvedValue({
+        booking_id: BOOKING_ID,
+        physical_room_number: "101",
+        checked_out_at: null,
+      });
+
+      await expect(
+        frontDeskService.checkOut({ booking_id: BOOKING_ID }, {
+          ...STAFF,
+          hotel_id: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+        })
+      ).rejects.toThrow(AppError);
+      expect(mockPrisma.roomAssignment.update).not.toHaveBeenCalled();
     });
   });
 });
@@ -251,6 +372,7 @@ describe("IncidentService", () => {
   });
 
   it("should create an incident", async () => {
+    mockFetchBooking.mockResolvedValue(confirmedBooking);
     mockPrisma.guestIncident.create.mockResolvedValue({
       incident_id: "i1",
       status: "open",
@@ -259,18 +381,25 @@ describe("IncidentService", () => {
     const result = await incidentService.create({
       booking_id: BOOKING_ID,
       description: "Canilla goteando",
-    });
+    }, STAFF);
 
     expect(result.status).toBe("open");
+    expect(mockPrisma.guestIncident.create).toHaveBeenCalledWith({
+      data: {
+        booking_id: BOOKING_ID,
+        hotel_id: HOTEL_ID,
+        description: "Canilla goteando",
+      },
+    });
   });
 
   it("should list incidents filtered by booking", async () => {
     mockPrisma.guestIncident.findMany.mockResolvedValue([]);
 
-    await incidentService.list(BOOKING_ID);
+    await incidentService.list(BOOKING_ID, STAFF);
 
     expect(mockPrisma.guestIncident.findMany).toHaveBeenCalledWith({
-      where: { booking_id: BOOKING_ID },
+      where: { hotel_id: HOTEL_ID, booking_id: BOOKING_ID },
       orderBy: { created_at: "desc" },
     });
   });
@@ -278,8 +407,8 @@ describe("IncidentService", () => {
   it("should throw 404 when updating a missing incident", async () => {
     mockPrisma.guestIncident.findUnique.mockResolvedValue(null);
 
-    await expect(
-      incidentService.setStatus("missing-id", "resolved")
-    ).rejects.toThrow(AppError);
+      await expect(
+        incidentService.setStatus("missing-id", "resolved", STAFF)
+      ).rejects.toThrow(AppError);
   });
 });

@@ -51,6 +51,7 @@ import {
   fetchBooking,
   fetchConfirmedBookings,
 } from "../../src/lib/booking-client.js";
+import { signAccessToken } from "../../../user-service/src/lib/tokens.js";
 
 const mockPrisma = prisma as any;
 const mockFetchBooking = fetchBooking as jest.Mock;
@@ -80,6 +81,14 @@ app.use(errorHandler);
 const BOOKING_ID = "a1b2c3d4-e5f6-4890-abcd-ef1234567890";
 const HOTEL_ID = "c1b2c3d4-e5f6-4890-abcd-ef1234567890";
 
+const STAFF_TOKEN = signAccessToken({
+  sub: "11111111-2222-4333-8444-555555555555",
+  email: "recep@example.com",
+  email_verified: true,
+  role: "RECEPTIONIST",
+  hotel_id: HOTEL_ID,
+});
+
 describe("Front Desk Service API", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -101,7 +110,7 @@ describe("Front Desk Service API", () => {
 
       const res = await request(app).get(
         `/v1/arrivals?hotel_id=${HOTEL_ID}&date=2026-10-02`
-      );
+      ).set("Authorization", `Bearer ${STAFF_TOKEN}`);
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
@@ -109,15 +118,18 @@ describe("Front Desk Service API", () => {
     });
 
     it("should return 400 with missing params", async () => {
-      const res = await request(app).get("/v1/arrivals");
+      const res = await request(app)
+        .get("/v1/arrivals")
+        .set("Authorization", `Bearer ${STAFF_TOKEN}`);
       expect(res.status).toBe(400);
     });
   });
 
   describe("POST /v1/check-in", () => {
-    it("should check in a confirmed booking", async () => {
+    it("should check in a confirmed booking with staff session", async () => {
       mockFetchBooking.mockResolvedValue({
         booking_id: BOOKING_ID,
+        hotel_id: HOTEL_ID,
         status: "confirmed",
       });
       mockPrisma.roomAssignment.findUnique.mockResolvedValue(null);
@@ -128,19 +140,30 @@ describe("Front Desk Service API", () => {
 
       const res = await request(app)
         .post("/v1/check-in")
+        .set("Authorization", `Bearer ${STAFF_TOKEN}`)
         .send({ booking_id: BOOKING_ID, physical_room_number: "101" });
 
       expect(res.status).toBe(201);
     });
 
+    it("should return 401 without a session", async () => {
+      const res = await request(app)
+        .post("/v1/check-in")
+        .send({ booking_id: BOOKING_ID, physical_room_number: "101" });
+
+      expect(res.status).toBe(401);
+    });
+
     it("should return 409 for a non-confirmed booking", async () => {
       mockFetchBooking.mockResolvedValue({
         booking_id: BOOKING_ID,
+        hotel_id: HOTEL_ID,
         status: "pending",
       });
 
       const res = await request(app)
         .post("/v1/check-in")
+        .set("Authorization", `Bearer ${STAFF_TOKEN}`)
         .send({ booking_id: BOOKING_ID, physical_room_number: "101" });
 
       expect(res.status).toBe(409);
@@ -148,7 +171,12 @@ describe("Front Desk Service API", () => {
   });
 
   describe("POST /v1/check-out", () => {
-    it("should check out an active stay", async () => {
+    it("should check out an active stay with staff session", async () => {
+      mockFetchBooking.mockResolvedValue({
+        booking_id: BOOKING_ID,
+        hotel_id: HOTEL_ID,
+        status: "confirmed",
+      });
       mockPrisma.roomAssignment.findUnique.mockResolvedValue({
         booking_id: BOOKING_ID,
         checked_out_at: null,
@@ -160,16 +188,23 @@ describe("Front Desk Service API", () => {
 
       const res = await request(app)
         .post("/v1/check-out")
+        .set("Authorization", `Bearer ${STAFF_TOKEN}`)
         .send({ booking_id: BOOKING_ID });
 
       expect(res.status).toBe(200);
     });
 
     it("should return 404 without an active check-in", async () => {
+      mockFetchBooking.mockResolvedValue({
+        booking_id: BOOKING_ID,
+        hotel_id: HOTEL_ID,
+        status: "confirmed",
+      });
       mockPrisma.roomAssignment.findUnique.mockResolvedValue(null);
 
       const res = await request(app)
         .post("/v1/check-out")
+        .set("Authorization", `Bearer ${STAFF_TOKEN}`)
         .send({ booking_id: BOOKING_ID });
 
       expect(res.status).toBe(404);
@@ -178,6 +213,10 @@ describe("Front Desk Service API", () => {
 
   describe("Incidents", () => {
     it("POST /v1/incidents should create an incident", async () => {
+      mockFetchBooking.mockResolvedValue({
+        booking_id: BOOKING_ID,
+        hotel_id: HOTEL_ID,
+      });
       mockPrisma.guestIncident.create.mockResolvedValue({
         incident_id: "i1",
         status: "open",
@@ -185,6 +224,7 @@ describe("Front Desk Service API", () => {
 
       const res = await request(app)
         .post("/v1/incidents")
+        .set("Authorization", `Bearer ${STAFF_TOKEN}`)
         .send({ booking_id: BOOKING_ID, description: "Canilla goteando" });
 
       expect(res.status).toBe(201);
@@ -193,7 +233,9 @@ describe("Front Desk Service API", () => {
     it("GET /v1/incidents should list incidents", async () => {
       mockPrisma.guestIncident.findMany.mockResolvedValue([]);
 
-      const res = await request(app).get("/v1/incidents");
+      const res = await request(app)
+        .get("/v1/incidents")
+        .set("Authorization", `Bearer ${STAFF_TOKEN}`);
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);

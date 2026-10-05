@@ -12,6 +12,9 @@ export const arrivalsQuerySchema = z.object({
 export const checkInSchema = z.object({
   booking_id: z.string().uuid(),
   physical_room_number: z.string().min(1).max(20),
+  // UUID externo del catalogo de Property (sin FK entre bases). Opcional:
+  // recepcion puede seguir operando solo con el numero fisico.
+  physical_room_id: z.string().uuid().optional(),
 });
 
 export const checkOutSchema = z.object({
