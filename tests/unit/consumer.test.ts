@@ -15,10 +15,10 @@ function mockDb() {
 }
 
 describe("handleBookingEvent", () => {
-  it("should upsert the arrival as confirmed on booking.created", async () => {
+  it("should upsert the arrival as confirmed on booking.confirmed", async () => {
     const db = mockDb();
 
-    await handleBookingEvent(db, "booking.created", {
+    await handleBookingEvent(db, "booking.confirmed", {
       booking_id: BOOKING_ID,
       guest_id: GUEST_ID,
       guest_name: "Ana",
@@ -56,10 +56,26 @@ describe("handleBookingEvent", () => {
     expect(db.arrival.updateMany).not.toHaveBeenCalled();
   });
 
-  it("should default a missing guest name to null", async () => {
+  it("should ignore booking.created because it only represents a pending booking", async () => {
     const db = mockDb();
 
     await handleBookingEvent(db, "booking.created", {
+      booking_id: BOOKING_ID,
+      guest_id: GUEST_ID,
+      hotel_id: HOTEL_ID,
+      room_type_id: ROOM_TYPE_ID,
+      check_in: "2026-10-01",
+      check_out: "2026-10-05",
+    } as any);
+
+    expect(db.arrival.upsert).not.toHaveBeenCalled();
+    expect(db.arrival.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("should default a missing guest name to null on confirmation", async () => {
+    const db = mockDb();
+
+    await handleBookingEvent(db, "booking.confirmed", {
       booking_id: BOOKING_ID,
       guest_id: GUEST_ID,
       hotel_id: HOTEL_ID,

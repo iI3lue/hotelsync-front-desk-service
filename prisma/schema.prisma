@@ -21,7 +21,7 @@ model RoomAssignment {
 }
 
 /**
- * Read model de llegadas: proyección local de booking.created/cancelled.
+ * Read model de llegadas confirmadas: proyección de booking.confirmed/cancelled.
  * `booking_id` es la clave de idempotencia (replays del broker hacen upsert).
  * Sin FK entre bases: la referencia a Booking es solo el UUID.
  */

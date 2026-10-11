@@ -21,7 +21,7 @@ export interface BookingCancelledPayload {
 type PrismaLike = typeof prisma;
 
 /**
- * Aplica un evento de Booking al read model de llegadas.
+ * Aplica booking.confirmed/cancelled al read model operativo de llegadas.
  * Idempotente: `booking_id` es PK, los replays del broker hacen upsert
  * (redelivery con el mismo payload deja el mismo estado).
  */
@@ -30,7 +30,10 @@ export async function handleBookingEvent(
   routingKey: string,
   payload: BookingCreatedPayload & BookingCancelledPayload
 ): Promise<void> {
-  if (routingKey === "booking.created") {
+  // booking.created solo significa pending; no debe aparecer en Llegadas.
+  if (routingKey === "booking.created") return;
+
+  if (routingKey === "booking.confirmed") {
     const created = payload as BookingCreatedPayload;
     await db.arrival.upsert({
       where: { booking_id: created.booking_id },
@@ -75,12 +78,12 @@ export async function handleBookingEvent(
 
 /**
  * Arranca el consumidor de llegadas: cola durable `front-desk.arrivals`
- * bindeada a `booking.created` y `booking.cancelled`.
+ * bindeada a confirmaciones y cancelaciones canónicas.
  */
 export async function startConsumer(): Promise<void> {
   await consume(
     ARRIVALS_QUEUE,
-    ["booking.created", "booking.cancelled"],
+    ["booking.confirmed", "booking.cancelled"],
     (routingKey, payload) => handleBookingEvent(prisma, routingKey, payload)
   );
 }

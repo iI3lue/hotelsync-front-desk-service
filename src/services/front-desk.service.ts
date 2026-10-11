@@ -30,7 +30,7 @@ export class FrontDeskService {
    * Llegadas del día: reservas `confirmed` del hotel que cubren la fecha.
    *
    * Lee el read model local (`arrivals`), proyectado desde
-   * `booking.created` / `booking.cancelled` vía RabbitMQ (fuente §6,
+   * `booking.confirmed` / `booking.cancelled` vía RabbitMQ (fuente §6,
    * comunicación asíncrona garantizada con outbox).
    */
   async getArrivals(query: ArrivalsQuery, actor: AuthClaims) {
