@@ -51,7 +51,7 @@ import {
   fetchBooking,
   fetchConfirmedBookings,
 } from "../../src/lib/booking-client.js";
-import { signAccessToken } from "../../../user-service/src/lib/tokens.js";
+import { signAccessToken } from "../helpers/tokens.js";
 
 const mockPrisma = prisma as any;
 const mockFetchBooking = fetchBooking as jest.Mock;
