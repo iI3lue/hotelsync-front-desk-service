@@ -7,9 +7,13 @@ import checkOutRouter from "./routes/check-out.js";
 import incidentsRouter from "./routes/incidents.js";
 import { startConsumer } from "./lib/consumer.js";
 import { startOutboxDispatcher } from "./lib/outbox.js";
+import { httpMetrics, metricsHandler } from "./lib/metrics.js";
 
 const app = express();
 const PORT = process.env.PORT || 3005;
+
+app.use(httpMetrics);
+app.get("/metrics", metricsHandler);
 
 app.use(requireGateway);
 

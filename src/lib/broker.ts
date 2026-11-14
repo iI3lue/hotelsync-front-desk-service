@@ -165,6 +165,10 @@ export function startDispatcher(
   return timer;
 }
 
+export function isConnected(): boolean {
+  return confirmChannel !== null;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -175,4 +179,5 @@ export const broker = {
   consume,
   createDispatcher,
   startDispatcher,
+  isConnected,
 };
