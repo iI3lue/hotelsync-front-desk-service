@@ -1,4 +1,5 @@
-import amqplib, { ConfirmChannel, ChannelModel, ConsumeMessage } from "amqplib";
+import amqplib, { ConfirmChannel, ChannelModel } from "amqplib";
+import { handleDelivery } from "./consumer-delivery.js";
 
 export const EXCHANGE = "hotelsync.events";
 export const ARRIVALS_QUEUE = "front-desk.arrivals";
@@ -72,9 +73,9 @@ export async function publish(
 export type MessageHandler = (routingKey: string, payload: any) => Promise<void>;
 
 /**
- * Consume durable con ack manual: declara la cola, la bindea a las routing
- * keys y procesa con prefetch. `ack` solo tras procesar OK; ante error hace
- * `nack` con requeue para no perder el mensaje.
+ * Consume durable con ack manual: declara la cola y su DLQ, la bindea a las
+ * routing keys y procesa con prefetch. Los errores se reintentan con backoff
+ * acotado y terminan en `${queue}.dlq`; nunca hay requeue en caliente.
  */
 export async function consume(
   queue: string,
@@ -83,26 +84,18 @@ export async function consume(
   prefetch = 10
 ): Promise<void> {
   const channel = await connect();
+  const deadLetterQueue = `${queue}.dlq`;
   await channel.assertQueue(queue, { durable: true });
+  await channel.assertQueue(deadLetterQueue, { durable: true });
   for (const key of routingKeys) {
     await channel.bindQueue(queue, EXCHANGE, key);
   }
   await channel.prefetch(prefetch);
   await channel.consume(
     queue,
-    async (msg: ConsumeMessage | null) => {
+    (msg) => {
       if (!msg) return;
-      try {
-        const payload = JSON.parse(msg.content.toString());
-        await handler(msg.fields.routingKey, payload);
-        channel.ack(msg);
-      } catch (err) {
-        console.error(
-          `[broker] error procesando ${msg.fields.routingKey}, requeue`,
-          err
-        );
-        channel.nack(msg, false, true);
-      }
+      void handleDelivery(channel, queue, deadLetterQueue, handler, msg);
     },
     { noAck: false }
   );
@@ -165,12 +158,12 @@ export function startDispatcher(
   return timer;
 }
 
-export function isConnected(): boolean {
-  return confirmChannel !== null;
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function isConnected(): boolean {
+  return confirmChannel !== null;
 }
 
 export const broker = {
